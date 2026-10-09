@@ -203,6 +203,13 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
   const deleteList = async () => {
     if (window.confirm('Are you sure you want to completely delete this list? This cannot be undone.')) {
       try {
+        // Delete all items in the subcollection first to prevent orphaned data
+        const itemDeletionPromises = items.map(item => 
+          deleteDoc(doc(db, 'lists', listId, 'items', item.id))
+        );
+        await Promise.all(itemDeletionPromises);
+        
+        // Then delete the actual list document
         await deleteDoc(doc(db, 'lists', listId));
         router.push('/dashboard');
       } catch (error) {
