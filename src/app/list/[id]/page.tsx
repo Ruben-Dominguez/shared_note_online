@@ -11,6 +11,8 @@ import Link from 'next/link';
 interface ListItem {
   id: string;
   title: string;
+  imageUrl?: string;
+  year?: string;
   completed: boolean;
 }
 
@@ -19,8 +21,11 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
 
   const [listName, setListName] = useState('Loading...');
+  const [listCategory, setListCategory] = useState<'movie' | 'series' | 'anime' | 'game'>('movie');
   const [items, setItems] = useState<ListItem[]>([]);
   const [newItemTitle, setNewItemTitle] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -53,6 +58,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
       }
 
       setListName(listData.name);
+      setListCategory(listData.category || 'movie');
 
       // Subscribe to items subcollection
       const itemsRef = collection(db, 'lists', listId, 'items');
@@ -73,18 +79,74 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
     return () => unsubscribeAuth();
   }, [listId, router]);
 
-  const addItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newItemTitle.trim() || !auth.currentUser) return;
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (newItemTitle.trim().length < 3) {
+        setSearchResults([]);
+        return;
+      }
+      setIsSearching(true);
+      try {
+        let results = [];
+        const query = encodeURIComponent(newItemTitle);
+        
+        if (listCategory === 'movie' || listCategory === 'series') {
+          const type = listCategory === 'movie' ? 'movie' : 'tv';
+          const tmdbKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+          if (tmdbKey) {
+            const res = await fetch(`https://api.themoviedb.org/3/search/${type}?api_key=${tmdbKey}&query=${query}`);
+            const data = await res.json();
+            results = data.results?.slice(0, 5).map((item: any) => ({
+              id: item.id.toString(),
+              title: item.title || item.name,
+              imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : null,
+              year: (item.release_date || item.first_air_date || '').substring(0, 4)
+            })) || [];
+          }
+        } else if (listCategory === 'anime') {
+          const res = await fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=5`);
+          const data = await res.json();
+          results = data.data?.map((item: any) => ({
+            id: item.mal_id.toString(),
+            title: item.title,
+            imageUrl: item.images?.jpg?.image_url || null,
+            year: item.year?.toString() || ''
+          })) || [];
+        } else if (listCategory === 'game') {
+          const res = await fetch(`https://www.cheapshark.com/api/1.0/games?title=${query}&limit=5`);
+          const data = await res.json();
+          results = data?.map((item: any) => ({
+            id: item.gameID,
+            title: item.external,
+            imageUrl: item.thumb || null,
+            year: ''
+          })) || [];
+        }
+        setSearchResults(results);
+      } catch (error) {
+        console.error("Search error:", error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [newItemTitle, listCategory]);
+
+  const handleAddItem = async (selectedItem: any) => {
+    if (!auth.currentUser) return;
 
     try {
       await addDoc(collection(db, 'lists', listId, 'items'), {
-        title: newItemTitle,
+        title: selectedItem.title,
+        imageUrl: selectedItem.imageUrl,
+        year: selectedItem.year || '',
         completed: false,
         addedBy: auth.currentUser.uid,
         createdAt: serverTimestamp()
       });
       setNewItemTitle('');
+      setSearchResults([]);
     } catch (error) {
       console.error("Error adding item: ", error);
     }
@@ -176,24 +238,44 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
 
         <h1 className="text-4xl font-extrabold mb-10">{listName}</h1>
 
-        <form onSubmit={addItem} className="flex gap-3 mb-10 relative">
+        <div className="relative mb-10">
           <input
             type="text"
-            placeholder="Add a movie, series, or game..."
+            placeholder={`Search for a ${listCategory}...`}
             value={newItemTitle}
             onChange={(e) => setNewItemTitle(e.target.value)}
-            className="flex-1 bg-card border border-border rounded-xl px-6 py-4 pr-16 focus:outline-none focus:ring-2 focus:ring-primary transition-all text-lg shadow-sm"
-            maxLength={100}
-            required
+            className="w-full bg-card border border-border rounded-xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-primary transition-all text-lg shadow-sm"
           />
-          <button
-            type="submit"
-            disabled={!newItemTitle.trim()}
-            className="absolute right-2 top-2 bottom-2 aspect-square bg-primary text-primary-foreground rounded-lg flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 transition-all"
-          >
-            <Plus size={24} />
-          </button>
-        </form>
+          {isSearching && (
+            <div className="absolute right-4 top-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
+            </div>
+          )}
+          
+          {searchResults.length > 0 && (
+            <div className="absolute z-10 w-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  onClick={() => handleAddItem(result)}
+                  className="w-full flex items-center gap-4 p-4 hover:bg-muted transition-colors text-left border-b border-border last:border-0"
+                >
+                  {result.imageUrl ? (
+                    <img src={result.imageUrl} alt={result.title} className="w-12 h-16 object-cover rounded-md" />
+                  ) : (
+                    <div className="w-12 h-16 bg-muted flex items-center justify-center rounded-md">
+                      <span className="text-xs text-muted-foreground text-center">No Image</span>
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="font-bold text-lg">{result.title}</h4>
+                    {result.year && <span className="text-sm text-muted-foreground">{result.year}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="space-y-3">
           {items.length === 0 ? (
@@ -213,15 +295,23 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
                   onClick={() => toggleItem(item.id, item.completed)}
                   className="flex items-center gap-4 flex-1 text-left group"
                 >
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${item.completed
+                  <div className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${item.completed
                       ? 'bg-primary border-primary text-primary-foreground'
                       : 'border-muted-foreground group-hover:border-primary'
                     }`}>
                     {item.completed && <Check size={14} strokeWidth={3} />}
                   </div>
-                  <span className={`text-lg transition-all ${item.completed ? 'line-through text-muted-foreground' : 'font-medium'}`}>
-                    {item.title}
-                  </span>
+
+                  {item.imageUrl && (
+                    <img src={item.imageUrl} alt={item.title} className={`w-12 h-16 object-cover rounded-md transition-all ${item.completed ? 'opacity-50 grayscale' : ''}`} />
+                  )}
+
+                  <div className={`transition-all ${item.completed ? 'opacity-50' : ''}`}>
+                    <span className={`text-lg font-bold block ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
+                      {item.title}
+                    </span>
+                    {item.year && <span className="text-sm text-muted-foreground">{item.year}</span>}
+                  </div>
                 </button>
 
                 <button

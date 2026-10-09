@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, or, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
-import { Plus, List as ListIcon, Share2, LogOut, ArrowLeft, Users } from 'lucide-react';
+import { Plus, List as ListIcon, Share2, LogOut, ArrowLeft, Users, Film, Tv, PlaySquare, Gamepad2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface NoteList {
   id: string;
   name: string;
+  category: 'movie' | 'series' | 'anime' | 'game';
   ownerId: string;
   sharedWith: string[];
 }
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const [lists, setLists] = useState<NoteList[]>([]);
   const [loading, setLoading] = useState(true);
   const [newListName, setNewListName] = useState('');
+  const [newListCategory, setNewListCategory] = useState<'movie' | 'series' | 'anime' | 'game'>('movie');
   const [joinCode, setJoinCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
@@ -67,11 +69,13 @@ export default function Dashboard() {
     try {
       await addDoc(collection(db, 'lists'), {
         name: newListName,
+        category: newListCategory,
         ownerId: auth.currentUser.uid,
         sharedWith: [],
         createdAt: serverTimestamp()
       });
       setNewListName('');
+      setNewListCategory('movie');
     } catch (error) {
       console.error("Error creating list: ", error);
     }
@@ -143,26 +147,38 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-          <form onSubmit={createList} className="flex flex-col gap-2 bg-card p-6 rounded-2xl border border-border">
-            <h3 className="font-bold text-lg mb-2">Create New List</h3>
-            <div className="flex gap-2">
+          <form onSubmit={createList} className="flex flex-col gap-4 bg-card p-6 rounded-2xl border border-border">
+            <h3 className="font-bold text-lg">Create New List</h3>
+            <div className="flex flex-col gap-3">
               <input
                 type="text"
-                placeholder="E.g., Movies to Watch 🍿"
+                placeholder="E.g., Marvel Movies 🍿"
                 value={newListName}
                 onChange={(e) => setNewListName(e.target.value)}
-                className="flex-1 bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
                 maxLength={40}
                 required
               />
-              <button 
-                type="submit" 
-                disabled={isCreating || !newListName.trim()}
-                className="bg-primary text-primary-foreground px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-50 transition-all shadow-md"
-              >
-                {isCreating ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-background border-t-transparent"></div> : <Plus size={20} />}
-                Create
-              </button>
+              <div className="flex gap-2">
+                <select 
+                  value={newListCategory}
+                  onChange={(e) => setNewListCategory(e.target.value as any)}
+                  className="flex-1 bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary transition-all appearance-none cursor-pointer"
+                >
+                  <option value="movie">🎬 Movies</option>
+                  <option value="series">📺 Series</option>
+                  <option value="anime">🎌 Anime</option>
+                  <option value="game">🎮 Games</option>
+                </select>
+                <button 
+                  type="submit" 
+                  disabled={isCreating || !newListName.trim()}
+                  className="bg-primary text-primary-foreground px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-50 transition-all shadow-md"
+                >
+                  {isCreating ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-background border-t-transparent"></div> : <Plus size={20} />}
+                  Create
+                </button>
+              </div>
             </div>
           </form>
 
@@ -206,7 +222,11 @@ export default function Dashboard() {
                   <div>
                     <div className="flex justify-between items-start mb-4">
                       <div className="p-3 bg-primary/10 text-primary rounded-xl group-hover:scale-110 transition-transform">
-                        <ListIcon size={24} />
+                        {list.category === 'movie' && <Film size={24} />}
+                        {list.category === 'series' && <Tv size={24} />}
+                        {list.category === 'anime' && <PlaySquare size={24} />}
+                        {list.category === 'game' && <Gamepad2 size={24} />}
+                        {!list.category && <ListIcon size={24} />}
                       </div>
                       {list.sharedWith.length > 0 && (
                         <div className="flex items-center gap-1 text-xs font-medium text-purple-500 bg-purple-500/10 px-2 py-1 rounded-full">
