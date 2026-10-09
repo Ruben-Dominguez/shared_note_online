@@ -4,9 +4,10 @@ import { useState, useEffect, use, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { ArrowLeft, Check, Copy, Plus, Trash2, Link as LinkIcon } from 'lucide-react';
+import { doc, collection, query, orderBy, onSnapshot, setDoc, updateDoc, deleteDoc, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { ArrowLeft, Check, Copy, Plus, Trash2, Link as LinkIcon, GripVertical } from 'lucide-react';
 import Link from 'next/link';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 interface ListItem {
   id: string;
@@ -22,6 +23,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
 
   const [listName, setListName] = useState('Loading...');
   const [listCategory, setListCategory] = useState<'movie' | 'series' | 'anime' | 'game'>('movie');
+  const [listOrder, setListOrder] = useState<string[]>([]);
   const [items, setItems] = useState<ListItem[]>([]);
   const [newItemTitle, setNewItemTitle] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -38,33 +40,31 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
         return;
       }
 
-      // Check access and get list details
-      const listRef = doc(db, 'lists', listId);
-      const listSnap = await getDoc(listRef);
-
-      if (!listSnap.exists()) {
-        router.push('/dashboard');
-        return;
-      }
-
-      const listData = listSnap.data();
-      if (listData.ownerId === user.uid) {
-        setIsOwner(true);
-      }
-      if (listData.ownerId !== user.uid && !listData.sharedWith.includes(user.uid)) {
-        setAccessDenied(true);
-        setLoading(false);
-        return;
-      }
-
-      setListName(listData.name);
-      setListCategory(listData.category || 'movie');
+      // Subscribe to list doc to get real-time order and name changes
+      const unsubscribeList = onSnapshot(doc(db, 'lists', listId), (docSnap) => {
+        if (!docSnap.exists()) {
+          router.push('/dashboard');
+          return;
+        }
+        const listData = docSnap.data();
+        if (listData.ownerId === user.uid) {
+          setIsOwner(true);
+        }
+        if (listData.ownerId !== user.uid && !listData.sharedWith.includes(user.uid)) {
+          setAccessDenied(true);
+          setLoading(false);
+          return;
+        }
+        setListName(listData.name);
+        setListCategory(listData.category || 'movie');
+        setListOrder(listData.itemOrder || []);
+      });
 
       // Subscribe to items subcollection
       const itemsRef = collection(db, 'lists', listId, 'items');
       const q = query(itemsRef, orderBy('createdAt', 'desc'));
 
-      const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+      const unsubscribeItems = onSnapshot(q, (snapshot) => {
         const fetchedItems: ListItem[] = [];
         snapshot.forEach((doc) => {
           fetchedItems.push({ id: doc.id, ...doc.data() } as ListItem);
@@ -73,7 +73,10 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
         setLoading(false);
       });
 
-      return () => unsubscribeSnapshot();
+      return () => {
+        unsubscribeList();
+        unsubscribeItems();
+      };
     });
 
     return () => unsubscribeAuth();
@@ -137,13 +140,17 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
     if (!auth.currentUser) return;
 
     try {
-      await addDoc(collection(db, 'lists', listId, 'items'), {
+      const newDocRef = doc(collection(db, 'lists', listId, 'items'));
+      await setDoc(newDocRef, {
         title: selectedItem.title,
         imageUrl: selectedItem.imageUrl,
         year: selectedItem.year || '',
         completed: false,
         addedBy: auth.currentUser.uid,
         createdAt: serverTimestamp()
+      });
+      await updateDoc(doc(db, 'lists', listId), {
+        itemOrder: arrayUnion(newDocRef.id)
       });
       setNewItemTitle('');
       setSearchResults([]);
@@ -165,6 +172,9 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
   const deleteItem = async (itemId: string) => {
     try {
       await deleteDoc(doc(db, 'lists', listId, 'items', itemId));
+      await updateDoc(doc(db, 'lists', listId), {
+        itemOrder: arrayRemove(itemId)
+      });
     } catch (error) {
       console.error("Error deleting item: ", error);
     }
@@ -184,6 +194,35 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
       } catch (error) {
         console.error("Error deleting list: ", error);
       }
+    }
+  };
+
+  const sortedItems = [...items].sort((a, b) => {
+    const aIndex = listOrder.indexOf(a.id);
+    const bIndex = listOrder.indexOf(b.id);
+    if (aIndex === -1 && bIndex === -1) return 0;
+    if (aIndex === -1) return 1; // Unordered items go to the end
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  });
+
+  const onDragEnd = async (result: any) => {
+    if (!result.destination) return;
+    
+    const currentOrderIds = sortedItems.map(item => item.id);
+    const [reorderedItem] = currentOrderIds.splice(result.source.index, 1);
+    currentOrderIds.splice(result.destination.index, 0, reorderedItem);
+    
+    // Optimistic UI update
+    setListOrder(currentOrderIds);
+
+    // Save to Firebase
+    try {
+      await updateDoc(doc(db, 'lists', listId), {
+        itemOrder: currentOrderIds
+      });
+    } catch (error) {
+      console.error("Error reordering: ", error);
     }
   };
 
@@ -278,51 +317,69 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
         </div>
 
         <div className="space-y-3">
-          {items.length === 0 ? (
+          {sortedItems.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               Your list is empty. Start adding things you want to watch or play!
             </div>
           ) : (
-            items.map((item) => (
-              <div
-                key={item.id}
-                className={`flex items-center justify-between p-4 rounded-xl border transition-all ${item.completed
-                    ? 'bg-muted/50 border-transparent'
-                    : 'bg-card border-border shadow-sm hover:border-primary/30'
-                  }`}
-              >
-                <button
-                  onClick={() => toggleItem(item.id, item.completed)}
-                  className="flex items-center gap-4 flex-1 text-left group"
-                >
-                  <div className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${item.completed
-                      ? 'bg-primary border-primary text-primary-foreground'
-                      : 'border-muted-foreground group-hover:border-primary'
-                    }`}>
-                    {item.completed && <Check size={14} strokeWidth={3} />}
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="droppable-list">
+                {(provided) => (
+                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
+                    {sortedItems.map((item, index) => (
+                      <Draggable key={item.id} draggableId={item.id} index={index}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            className={`flex items-center justify-between p-4 rounded-xl border transition-all ${item.completed
+                                ? 'bg-muted/50 border-transparent'
+                                : 'bg-card border-border shadow-sm'
+                              } ${snapshot.isDragging ? 'shadow-xl scale-[1.02] border-primary z-50 relative' : ''}`}
+                          >
+                            <div {...provided.dragHandleProps} className="p-2 mr-2 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing">
+                              <GripVertical size={20} />
+                            </div>
+
+                            <button
+                              onClick={() => toggleItem(item.id, item.completed)}
+                              className="flex items-center gap-4 flex-1 text-left group"
+                            >
+                              <div className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${item.completed
+                                  ? 'bg-primary border-primary text-primary-foreground'
+                                  : 'border-muted-foreground group-hover:border-primary'
+                                }`}>
+                                {item.completed && <Check size={14} strokeWidth={3} />}
+                              </div>
+
+                              {item.imageUrl && (
+                                <img src={item.imageUrl} alt={item.title} className={`w-12 h-16 object-cover rounded-md transition-all ${item.completed ? 'opacity-50 grayscale' : ''}`} />
+                              )}
+
+                              <div className={`transition-all ${item.completed ? 'opacity-50' : ''}`}>
+                                <span className={`text-lg font-bold block ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
+                                  {item.title}
+                                </span>
+                                {item.year && <span className="text-sm text-muted-foreground">{item.year}</span>}
+                              </div>
+                            </button>
+
+                            <button
+                              onClick={() => deleteItem(item.id)}
+                              className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors ml-4"
+                              title="Delete item"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
                   </div>
-
-                  {item.imageUrl && (
-                    <img src={item.imageUrl} alt={item.title} className={`w-12 h-16 object-cover rounded-md transition-all ${item.completed ? 'opacity-50 grayscale' : ''}`} />
-                  )}
-
-                  <div className={`transition-all ${item.completed ? 'opacity-50' : ''}`}>
-                    <span className={`text-lg font-bold block ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
-                      {item.title}
-                    </span>
-                    {item.year && <span className="text-sm text-muted-foreground">{item.year}</span>}
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => deleteItem(item.id)}
-                  className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors ml-4"
-                  title="Delete item"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            ))
+                )}
+              </Droppable>
+            </DragDropContext>
           )}
         </div>
       </div>
