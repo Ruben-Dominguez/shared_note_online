@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, collection, query, orderBy, onSnapshot, setDoc, updateDoc, deleteDoc, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { ArrowLeft, Check, Copy, Plus, Trash2, Link as LinkIcon, GripVertical } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Plus, Trash2, Link as LinkIcon, GripVertical, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -14,6 +14,7 @@ interface ListItem {
   title: string;
   imageUrl?: string;
   year?: string;
+  note?: string;
   completed: boolean;
 }
 
@@ -32,6 +33,8 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
   const [copied, setCopied] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [tempNote, setTempNote] = useState('');
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -177,6 +180,17 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
       });
     } catch (error) {
       console.error("Error deleting item: ", error);
+    }
+  };
+
+  const updateNote = async (itemId: string, note: string) => {
+    try {
+      await updateDoc(doc(db, 'lists', listId, 'items', itemId), {
+        note: note.trim()
+      });
+      setEditingNoteId(null);
+    } catch (error) {
+      console.error("Error updating note: ", error);
     }
   };
 
@@ -332,41 +346,86 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
                           <div
                             ref={provided.innerRef}
                             {...provided.draggableProps}
-                            className={`flex items-center justify-between p-4 rounded-xl border transition-all ${item.completed
+                            className={`flex items-start justify-between p-4 rounded-xl border transition-all group ${item.completed
                                 ? 'bg-muted/50 border-transparent'
                                 : 'bg-card border-border shadow-sm'
                               } ${snapshot.isDragging ? 'shadow-xl scale-[1.02] border-primary z-50 relative' : ''}`}
                           >
-                            <div {...provided.dragHandleProps} className="p-2 mr-2 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing">
+                            <div {...provided.dragHandleProps} className="p-2 mr-2 mt-4 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing">
                               <GripVertical size={20} />
                             </div>
 
-                            <button
-                              onClick={() => toggleItem(item.id, item.completed)}
-                              className="flex items-center gap-4 flex-1 text-left group"
-                            >
-                              <div className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${item.completed
-                                  ? 'bg-primary border-primary text-primary-foreground'
-                                  : 'border-muted-foreground group-hover:border-primary'
-                                }`}>
-                                {item.completed && <Check size={14} strokeWidth={3} />}
-                              </div>
+                            <div className="flex-1 flex flex-col items-start min-w-0 py-1">
+                              <button
+                                onClick={() => toggleItem(item.id, item.completed)}
+                                className="flex items-center gap-4 text-left group/btn w-full mb-1"
+                              >
+                                <div className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${item.completed
+                                    ? 'bg-primary border-primary text-primary-foreground'
+                                    : 'border-muted-foreground group-hover/btn:border-primary'
+                                  }`}>
+                                  {item.completed && <Check size={14} strokeWidth={3} />}
+                                </div>
 
-                              {item.imageUrl && (
-                                <img src={item.imageUrl} alt={item.title} className={`w-12 h-16 object-cover rounded-md transition-all ${item.completed ? 'opacity-50 grayscale' : ''}`} />
-                              )}
+                                {item.imageUrl && (
+                                  <img src={item.imageUrl} alt={item.title} className={`w-12 h-16 object-cover rounded-md transition-all ${item.completed ? 'opacity-50 grayscale' : ''}`} />
+                                )}
 
-                              <div className={`transition-all ${item.completed ? 'opacity-50' : ''}`}>
-                                <span className={`text-lg font-bold block ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
-                                  {item.title}
-                                </span>
-                                {item.year && <span className="text-sm text-muted-foreground">{item.year}</span>}
+                                <div className={`transition-all min-w-0 ${item.completed ? 'opacity-50' : ''}`}>
+                                  <span className={`text-lg font-bold block truncate ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
+                                    {item.title}
+                                  </span>
+                                  {item.year && <span className="text-sm text-muted-foreground">{item.year}</span>}
+                                </div>
+                              </button>
+
+                              <div className="pl-10 w-full pr-12">
+                                {editingNoteId === item.id ? (
+                                  <div className="flex items-center gap-2 mt-2 w-full">
+                                    <input 
+                                      type="text" 
+                                      value={tempNote}
+                                      onChange={(e) => setTempNote(e.target.value)}
+                                      placeholder="e.g. We are on Ep 9..."
+                                      className="flex-1 bg-background border border-border text-sm rounded-md px-3 py-1.5 focus:outline-none focus:border-primary"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') updateNote(item.id, tempNote);
+                                        if (e.key === 'Escape') setEditingNoteId(null);
+                                      }}
+                                    />
+                                    <button 
+                                      onClick={() => updateNote(item.id, tempNote)}
+                                      className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md font-medium"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {item.note ? (
+                                      <div 
+                                        onClick={() => { setEditingNoteId(item.id); setTempNote(item.note || ''); }}
+                                        className="text-sm text-purple-500 bg-purple-500/10 px-3 py-1.5 rounded-md cursor-pointer hover:bg-purple-500/20 transition-colors w-fit"
+                                      >
+                                        {item.note}
+                                      </div>
+                                    ) : (
+                                      <button 
+                                        onClick={() => { setEditingNoteId(item.id); setTempNote(''); }}
+                                        className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+                                      >
+                                        <MessageSquare size={12} /> Add Note
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            </button>
+                            </div>
 
                             <button
                               onClick={() => deleteItem(item.id)}
-                              className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors ml-4"
+                              className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors ml-4 self-center"
                               title="Delete item"
                             >
                               <Trash2 size={18} />
