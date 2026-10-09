@@ -358,7 +358,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
                             <div className="flex-1 flex flex-col items-start min-w-0 py-1">
                               <button
                                 onClick={() => toggleItem(item.id, item.completed)}
-                                className="flex items-center gap-4 text-left group/btn w-full mb-1"
+                                className="flex items-center gap-4 text-left group/btn w-full"
                               >
                                 <div className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${item.completed
                                     ? 'bg-primary border-primary text-primary-foreground'
@@ -379,57 +379,64 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
                                 </div>
                               </button>
 
-                              <div className="pl-10 w-full pr-12">
-                                {editingNoteId === item.id ? (
-                                  <div className="flex items-center gap-2 mt-2 w-full">
-                                    <input 
-                                      type="text" 
-                                      value={tempNote}
-                                      onChange={(e) => setTempNote(e.target.value)}
-                                      placeholder="e.g. We are on Ep 9..."
-                                      className="flex-1 bg-background border border-border text-sm rounded-md px-3 py-1.5 focus:outline-none focus:border-primary"
-                                      autoFocus
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') updateNote(item.id, tempNote);
-                                        if (e.key === 'Escape') setEditingNoteId(null);
-                                      }}
-                                    />
-                                    <button 
-                                      onClick={() => updateNote(item.id, tempNote)}
-                                      className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md font-medium"
-                                    >
-                                      Save
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2 mt-1">
-                                    {item.note ? (
-                                      <div 
-                                        onClick={() => { setEditingNoteId(item.id); setTempNote(item.note || ''); }}
-                                        className="text-sm text-purple-500 bg-purple-500/10 px-3 py-1.5 rounded-md cursor-pointer hover:bg-purple-500/20 transition-colors w-fit"
-                                      >
-                                        {item.note}
-                                      </div>
-                                    ) : (
+                              {(item.note || editingNoteId === item.id) && (
+                                <div className="pl-10 w-full pr-12 mt-2">
+                                  {editingNoteId === item.id ? (
+                                    <div className="flex items-center gap-2 w-full">
+                                      <input 
+                                        type="text" 
+                                        value={tempNote}
+                                        onChange={(e) => setTempNote(e.target.value)}
+                                        placeholder="e.g. We are on Ep 9..."
+                                        className="flex-1 bg-background border border-border text-sm rounded-md px-3 py-1.5 focus:outline-none focus:border-primary"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') updateNote(item.id, tempNote);
+                                          if (e.key === 'Escape') setEditingNoteId(null);
+                                        }}
+                                      />
                                       <button 
-                                        onClick={() => { setEditingNoteId(item.id); setTempNote(''); }}
-                                        className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+                                        onClick={() => updateNote(item.id, tempNote)}
+                                        className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md font-medium"
                                       >
-                                        <MessageSquare size={12} /> Add Note
+                                        Save
                                       </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                                      <button 
+                                        onClick={() => setEditingNoteId(null)}
+                                        className="text-xs bg-muted text-muted-foreground hover:bg-muted/80 px-3 py-1.5 rounded-md font-medium transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div 
+                                      onClick={() => { setEditingNoteId(item.id); setTempNote(item.note || ''); }}
+                                      className="text-sm text-purple-500 bg-purple-500/10 px-3 py-1.5 rounded-md cursor-pointer hover:bg-purple-500/20 transition-colors w-fit"
+                                      title="Click to edit"
+                                    >
+                                      {item.note}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
-                            <button
-                              onClick={() => deleteItem(item.id)}
-                              className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors ml-4 self-center"
-                              title="Delete item"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            <div className="flex items-center gap-1 ml-4 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => { setEditingNoteId(item.id); setTempNote(item.note || ''); }}
+                                className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                title="Add/Edit Note"
+                              >
+                                <MessageSquare size={18} />
+                              </button>
+                              <button
+                                onClick={() => deleteItem(item.id)}
+                                className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                title="Delete item"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           </div>
                         )}
                       </Draggable>
