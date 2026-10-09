@@ -4,7 +4,7 @@ import { useState, useEffect, use, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, collection, query, orderBy, onSnapshot, setDoc, updateDoc, deleteDoc, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, collection, query, orderBy, onSnapshot, setDoc, updateDoc, deleteDoc, serverTimestamp, arrayUnion, arrayRemove, deleteField } from 'firebase/firestore';
 import { ArrowLeft, Check, Copy, Plus, Trash2, Link as LinkIcon, GripVertical, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -35,6 +35,8 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
   const [isOwner, setIsOwner] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [tempNote, setTempNote] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [activeUsers, setActiveUsers] = useState<Record<string, any>>({});
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -42,6 +44,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
         router.push('/');
         return;
       }
+      setCurrentUser(user);
 
       // Subscribe to list doc to get real-time order and name changes
       const unsubscribeList = onSnapshot(doc(db, 'lists', listId), (docSnap) => {
@@ -61,6 +64,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
         setListName(listData.name);
         setListCategory(listData.category || 'movie');
         setListOrder(listData.itemOrder || []);
+        setActiveUsers(listData.activeUsers || {});
       });
 
       // Subscribe to items subcollection
@@ -84,6 +88,41 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
 
     return () => unsubscribeAuth();
   }, [listId, router]);
+
+  useEffect(() => {
+    if (!currentUser || !listId) return;
+
+    const joinPresence = () => {
+      const ref = doc(db, 'lists', listId);
+      updateDoc(ref, {
+        [`activeUsers.${currentUser.uid}`]: {
+          uid: currentUser.uid,
+          displayName: currentUser.displayName || 'User',
+          photoURL: currentUser.photoURL || '',
+          lastActive: serverTimestamp()
+        }
+      }).catch(console.error);
+    };
+
+    const leavePresence = () => {
+      const ref = doc(db, 'lists', listId);
+      updateDoc(ref, {
+        [`activeUsers.${currentUser.uid}`]: deleteField()
+      }).catch(console.error);
+    };
+
+    joinPresence();
+    const interval = setInterval(joinPresence, 60000); // Heartbeat every 60s
+    
+    const handleBeforeUnload = () => leavePresence();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(interval);
+      leavePresence();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [listId, currentUser]);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
@@ -269,6 +308,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
   const totalItems = items.length;
   const completedItems = items.filter(i => i.completed).length;
   const progressPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  const otherActiveUsers = Object.values(activeUsers).filter(u => u.uid !== currentUser?.uid);
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6 md:p-12">
@@ -280,6 +320,22 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
           </Link>
 
           <div className="flex gap-2">
+            {otherActiveUsers.length > 0 && (
+              <div className="flex items-center -space-x-2 mr-4">
+                {otherActiveUsers.map(user => (
+                  <div key={user.uid} className="relative group" title={`${user.displayName} is viewing this list`}>
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full border-2 border-background ring-2 ring-green-500/50 object-cover" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full border-2 border-background bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold ring-2 ring-green-500/50">
+                        {user.displayName.charAt(0)}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></div>
+                  </div>
+                ))}
+              </div>
+            )}
             <button
               onClick={copyShareCode}
               className="flex items-center gap-2 bg-card border border-border px-4 py-2 rounded-lg hover:bg-muted transition-colors text-sm font-medium"
