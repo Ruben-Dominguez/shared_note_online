@@ -296,7 +296,7 @@ export default function Dashboard() {
                             </div>
                             <div className="mt-6 text-sm text-muted-foreground flex justify-between items-center">
                               <span>{list.ownerId === auth.currentUser?.uid ? 'Owner' : 'Participant'}</span>
-                              <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                              <span className="text-primary opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center gap-1">
                                 Open <ArrowLeft size={14} className="rotate-180" />
                               </span>
                             </div>

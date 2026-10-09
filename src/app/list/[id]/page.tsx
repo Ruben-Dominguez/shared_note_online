@@ -428,7 +428,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
                               )}
                             </div>
 
-                            <div className="flex items-center gap-1 ml-4 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-1 ml-4 self-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => { setEditingNoteId(item.id); setTempNote(item.note || ''); }}
                                 className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
