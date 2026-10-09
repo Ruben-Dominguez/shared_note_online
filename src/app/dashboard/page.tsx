@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, or, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
-import { Plus, List as ListIcon, Share2, LogOut, ArrowLeft, Users, Film, Tv, PlaySquare, Gamepad2 } from 'lucide-react';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, or, doc, updateDoc, arrayUnion, getDoc, setDoc } from 'firebase/firestore';
+import { Plus, List as ListIcon, Share2, LogOut, ArrowLeft, Users, Film, Tv, PlaySquare, Gamepad2, GripVertical } from 'lucide-react';
 import Link from 'next/link';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 interface NoteList {
   id: string;
@@ -18,6 +19,7 @@ interface NoteList {
 
 export default function Dashboard() {
   const [lists, setLists] = useState<NoteList[]>([]);
+  const [dashboardOrder, setDashboardOrder] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [newListName, setNewListName] = useState('');
   const [newListCategory, setNewListCategory] = useState<'movie' | 'series' | 'anime' | 'game'>('movie');
@@ -51,11 +53,20 @@ export default function Dashboard() {
         setLists(fetchedLists);
         setLoading(false);
       }, (error) => {
-        console.error("Firestore Error (you likely need to create a composite index! Check your console for a direct link from Firebase):", error);
+        console.error("Firestore Error:", error);
         setLoading(false);
       });
 
-      return () => unsubscribeSnapshot();
+      const unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+        if (docSnap.exists()) {
+          setDashboardOrder(docSnap.data().dashboardOrder || []);
+        }
+      });
+
+      return () => {
+        unsubscribeSnapshot();
+        unsubscribeUser();
+      };
     });
 
     return () => unsubscribeAuth();
@@ -115,6 +126,33 @@ export default function Dashboard() {
       setJoinError('An error occurred.');
     }
     setIsJoining(false);
+  };
+
+  const sortedLists = [...lists].sort((a, b) => {
+    const aIndex = dashboardOrder.indexOf(a.id);
+    const bIndex = dashboardOrder.indexOf(b.id);
+    if (aIndex === -1 && bIndex === -1) return 0;
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  });
+
+  const onDragEnd = async (result: any) => {
+    if (!result.destination) return;
+    
+    const currentOrderIds = sortedLists.map(list => list.id);
+    const [reorderedList] = currentOrderIds.splice(result.source.index, 1);
+    currentOrderIds.splice(result.destination.index, 0, reorderedList);
+    
+    setDashboardOrder(currentOrderIds);
+
+    try {
+      await setDoc(doc(db, 'users', auth.currentUser!.uid), {
+        dashboardOrder: currentOrderIds
+      }, { merge: true });
+    } catch (error) {
+      console.error("Error reordering lists: ", error);
+    }
   };
 
   if (loading) {
@@ -206,7 +244,7 @@ export default function Dashboard() {
           </form>
         </div>
 
-        {lists.length === 0 ? (
+        {sortedLists.length === 0 ? (
           <div className="text-center py-20 bg-card/50 rounded-3xl border border-border border-dashed">
             <ListIcon size={48} className="mx-auto mb-4 text-muted-foreground opacity-50" />
             <h3 className="text-xl font-semibold mb-2">No lists yet</h3>
@@ -215,37 +253,63 @@ export default function Dashboard() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lists.map((list) => (
-              <Link href={`/list/${list.id}`} key={list.id}>
-                <div className="bg-card border border-border p-6 rounded-2xl hover:border-primary/50 hover:shadow-xl transition-all cursor-pointer group h-full flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="p-3 bg-primary/10 text-primary rounded-xl group-hover:scale-110 transition-transform">
-                        {list.category === 'movie' && <Film size={24} />}
-                        {list.category === 'series' && <Tv size={24} />}
-                        {list.category === 'anime' && <PlaySquare size={24} />}
-                        {list.category === 'game' && <Gamepad2 size={24} />}
-                        {!list.category && <ListIcon size={24} />}
-                      </div>
-                      {list.sharedWith.length > 0 && (
-                        <div className="flex items-center gap-1 text-xs font-medium text-purple-500 bg-purple-500/10 px-2 py-1 rounded-full">
-                          <Share2 size={12} /> Shared
+          <DragDropContext onDragEnd={onDragEnd}>
+            <Droppable droppableId="dashboard-lists" direction="horizontal">
+              {(provided) => (
+                <div 
+                  {...provided.droppableProps} 
+                  ref={provided.innerRef}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                >
+                  {sortedLists.map((list, index) => (
+                    <Draggable key={list.id} draggableId={list.id} index={index}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={`bg-card border border-border p-6 rounded-2xl hover:border-primary/50 transition-all group flex flex-col justify-between h-full relative ${snapshot.isDragging ? 'shadow-2xl scale-105 border-primary z-50' : ''}`}
+                        >
+                          <div 
+                            {...provided.dragHandleProps} 
+                            className="absolute top-4 right-4 p-2 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing bg-background/50 rounded-lg backdrop-blur-sm md:opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                          >
+                            <GripVertical size={20} />
+                          </div>
+
+                          <Link href={`/list/${list.id}`} className="flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="p-3 bg-primary/10 text-primary rounded-xl group-hover:scale-110 transition-transform">
+                                  {list.category === 'movie' && <Film size={24} />}
+                                  {list.category === 'series' && <Tv size={24} />}
+                                  {list.category === 'anime' && <PlaySquare size={24} />}
+                                  {list.category === 'game' && <Gamepad2 size={24} />}
+                                  {!list.category && <ListIcon size={24} />}
+                                </div>
+                                {list.sharedWith.length > 0 && (
+                                  <div className="flex items-center gap-1 text-xs font-medium text-purple-500 bg-purple-500/10 px-2 py-1 rounded-full mr-10">
+                                    <Share2 size={12} /> Shared
+                                  </div>
+                                )}
+                              </div>
+                              <h3 className="text-xl font-bold mb-2 group-hover:text-primary transition-colors">{list.name}</h3>
+                            </div>
+                            <div className="mt-6 text-sm text-muted-foreground flex justify-between items-center">
+                              <span>{list.ownerId === auth.currentUser?.uid ? 'Owner' : 'Participant'}</span>
+                              <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                Open <ArrowLeft size={14} className="rotate-180" />
+                              </span>
+                            </div>
+                          </Link>
                         </div>
                       )}
-                    </div>
-                    <h3 className="text-xl font-bold mb-2 group-hover:text-primary transition-colors">{list.name}</h3>
-                  </div>
-                  <div className="mt-6 text-sm text-muted-foreground flex justify-between items-center">
-                    <span>{list.ownerId === auth.currentUser?.uid ? 'Owner' : 'Participant'}</span>
-                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                      Open <ArrowLeft size={14} className="rotate-180" />
-                    </span>
-                  </div>
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
                 </div>
-              </Link>
-            ))}
-          </div>
+              )}
+            </Droppable>
+          </DragDropContext>
         )}
       </div>
     </div>
