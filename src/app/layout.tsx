@@ -21,12 +21,12 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Shared Notes",
+  title: "Shared Checklists",
   description: "Collaborative checklists for movies, series, games, and anime.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Shared Notes",
+    title: "Shared Checklists",
   },
   icons: {
     icon: '/icon.svg',

@@ -58,7 +58,7 @@ export default function Home() {
         </div>
 
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-          Shared Notes
+          Shared Checklists
         </h1>
 
         <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-lg">

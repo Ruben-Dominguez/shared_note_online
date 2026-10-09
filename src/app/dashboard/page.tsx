@@ -180,7 +180,7 @@ export default function Dashboard() {
         </header>
 
         <div className="mb-10">
-          <h1 className="text-4xl font-extrabold mb-2">Your Shared Notes</h1>
+          <h1 className="text-4xl font-extrabold mb-2">Your Shared Checklists</h1>
           <p className="text-muted-foreground">Manage your movie, series, and game checklists.</p>
         </div>
 
