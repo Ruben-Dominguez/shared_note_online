@@ -24,6 +24,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -42,6 +43,9 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
       }
 
       const listData = listSnap.data();
+      if (listData.ownerId === user.uid) {
+        setIsOwner(true);
+      }
       if (listData.ownerId !== user.uid && !listData.sharedWith.includes(user.uid)) {
         setAccessDenied(true);
         setLoading(false);
@@ -110,6 +114,17 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const deleteList = async () => {
+    if (window.confirm('Are you sure you want to completely delete this list? This cannot be undone.')) {
+      try {
+        await deleteDoc(doc(db, 'lists', listId));
+        router.push('/dashboard');
+      } catch (error) {
+        console.error("Error deleting list: ", error);
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -139,13 +154,24 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
             Back
           </Link>
 
-          <button
-            onClick={copyShareCode}
-            className="flex items-center gap-2 bg-card border border-border px-4 py-2 rounded-lg hover:bg-muted transition-colors text-sm font-medium"
-          >
-            {copied ? <Check size={16} className="text-green-500" /> : <LinkIcon size={16} />}
-            {copied ? 'Code Copied!' : 'Copy Share Code'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={copyShareCode}
+              className="flex items-center gap-2 bg-card border border-border px-4 py-2 rounded-lg hover:bg-muted transition-colors text-sm font-medium"
+            >
+              {copied ? <Check size={16} className="text-green-500" /> : <LinkIcon size={16} />}
+              {copied ? 'Code Copied!' : 'Copy Share Code'}
+            </button>
+            {isOwner && (
+              <button
+                onClick={deleteList}
+                className="flex items-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 px-4 py-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors text-sm font-medium"
+              >
+                <Trash2 size={16} />
+                Delete List
+              </button>
+            )}
+          </div>
         </header>
 
         <h1 className="text-4xl font-extrabold mb-10">{listName}</h1>
