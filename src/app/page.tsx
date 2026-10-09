@@ -87,27 +87,14 @@ export default function Home() {
               <span className="font-medium">Welcome, {user.displayName?.split(' ')[0]}!</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-8">
-              <Link href="/dashboard" className="p-6 rounded-2xl bg-card border border-border hover:border-primary/50 hover:shadow-lg transition-all group flex flex-col items-center gap-3 text-left">
-                <div className="p-3 bg-primary/10 rounded-full text-primary group-hover:scale-110 transition-transform">
-                  <Gamepad2 size={28} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg">My Notes</h3>
-                  <p className="text-sm text-muted-foreground">View your personal and shared lists</p>
-                </div>
-              </Link>
-
-              <Link href="/dashboard" className="p-6 rounded-2xl bg-card border border-border hover:border-purple-500/50 hover:shadow-lg transition-all group flex flex-col items-center gap-3 text-left">
-                <div className="p-3 bg-purple-500/10 rounded-full text-purple-500 group-hover:scale-110 transition-transform">
-                  <Tv size={28} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg">Join Shared List</h3>
-                  <p className="text-sm text-muted-foreground">Enter a code to join your partner&apos;s list</p>
-                </div>
-              </Link>
-            </div>
+            <Link 
+              href="/dashboard" 
+              className="group relative flex items-center justify-center gap-3 w-full max-w-sm px-8 py-4 mb-8 bg-primary text-primary-foreground rounded-full font-bold text-lg overflow-hidden transition-transform hover:scale-105 shadow-lg hover:shadow-primary/25"
+            >
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
+              <Gamepad2 size={24} />
+              Go to Dashboard
+            </Link>
 
             <button
               onClick={logout}
