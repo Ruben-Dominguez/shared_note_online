@@ -379,7 +379,7 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
                                 )}
 
                                 <div className={`transition-all min-w-0 ${item.completed ? 'opacity-50' : ''}`}>
-                                  <span className={`text-lg font-bold block truncate ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
+                                  <span className={`text-lg font-bold block break-words text-left leading-tight ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
                                     {item.title}
                                   </span>
                                   {item.year && <span className="text-sm text-muted-foreground">{item.year}</span>}
