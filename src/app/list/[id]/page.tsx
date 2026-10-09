@@ -266,6 +266,9 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
       </div>
     );
   }
+  const totalItems = items.length;
+  const completedItems = items.filter(i => i.completed).length;
+  const progressPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6 md:p-12">
@@ -296,7 +299,22 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
           </div>
         </header>
 
-        <h1 className="text-4xl font-extrabold mb-10">{listName}</h1>
+        <h1 className="text-4xl font-extrabold mb-6">{listName}</h1>
+        
+        {totalItems > 0 && (
+          <div className="mb-10">
+            <div className="flex justify-between items-end mb-2 text-sm font-medium">
+              <span className="text-muted-foreground">{completedItems} of {totalItems} completed</span>
+              <span className="text-primary font-bold">{progressPercentage}%</span>
+            </div>
+            <div className="h-3 w-full bg-muted rounded-full overflow-hidden border border-border">
+              <div 
+                className="h-full bg-gradient-to-r from-primary to-purple-500 transition-all duration-700 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
 
         <div className="relative mb-10">
           <input
