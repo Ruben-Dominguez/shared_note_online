@@ -110,13 +110,13 @@ function ListPageContent({ params }: { params: Promise<{ id: string }> }) {
             })) || [];
           }
         } else if (listCategory === 'anime') {
-          const res = await fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=5`);
+          const res = await fetch(`https://kitsu.io/api/edge/anime?filter[text]=${query}&page[limit]=5`);
           const data = await res.json();
           results = data.data?.map((item: any) => ({
-            id: item.mal_id.toString(),
-            title: item.title,
-            imageUrl: item.images?.jpg?.image_url || null,
-            year: item.year?.toString() || ''
+            id: item.id.toString(),
+            title: item.attributes?.titles?.en || item.attributes?.titles?.en_jp || item.attributes?.canonicalTitle,
+            imageUrl: item.attributes?.posterImage?.small || null,
+            year: item.attributes?.startDate?.substring(0, 4) || ''
           })) || [];
         } else if (listCategory === 'game') {
           const res = await fetch(`https://www.cheapshark.com/api/1.0/games?title=${query}&limit=5`);
